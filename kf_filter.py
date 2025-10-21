@@ -1,7 +1,14 @@
 import numpy as np
 import matplotlib.pyplot as plt
+import sys
 
-FILENAMES = './data/imu_data.txt', './data/kf_filter_data.txt'
+ROLL = './data/roll_data/roll_data.txt', './data/roll_data/kf_filter_data.txt'
+PITCH = './data/pitch_data/pitch_data.txt', './data/pitch_data/kf_filter_data.txt'
+DATA_SETS = [ROLL, PITCH]
+DATA_SET_INDEX = sys.argv[1] if len(sys.argv) > 1 else 0
+DATA_SET_INDEX = int(DATA_SET_INDEX)
+FILENAMES = DATA_SETS[DATA_SET_INDEX]  
+
 PLOT_OPTION = True
 
 ANGLE_UNITS = 'deg','rad'
@@ -27,8 +34,12 @@ class KalmanFilter:
         self.A = np.eye(4)
         self.C = np.eye(4)
 
-        self.Q = 0.25
-        self.R = 0.001
+        if DATA_SET_INDEX == 0:
+            self.Q = 5
+            self.R = 100
+        else:
+            self.Q = 100
+            self.R = 5
 
         self.measurement_noise_covar = np.eye(4) * self.R
         self.process_noise_covar = np.eye(4) * self.Q
@@ -46,9 +57,6 @@ class KalmanFilter:
         self.plot_results()
 
     def filter(self):
-
-        self.Q = 10
-        self.R = 100
 
         self.process_noise_covar = np.eye(4) * self.Q
         self.measurement_noise_covar = np.eye(4) * self.R
@@ -195,7 +203,10 @@ class KalmanFilter:
         except Exception as e:
             self.predicted_data = None
 
-    def plot_results(self, sample_size=4*50, plot_option=PLOT_OPTION):
+    def plot_results(self, sample_size=None, plot_option=PLOT_OPTION):
+
+        if sample_size is None:
+            sample_size = self.total_samples - 1
 
         if plot_option:
             sample_size = sample_size + 1
@@ -216,9 +227,9 @@ class KalmanFilter:
             plt.subplots_adjust(hspace=0.5)
 
             plt.subplot(2, 1, 1)
-            plt.plot(np.arange(sample_size), self.predicted_data['m_roll'][0,:sample_size], label='measured_roll', color='r')
+            plt.scatter(np.arange(sample_size), self.predicted_data['m_roll'][0,:sample_size], label='measured_roll', color='r')
 
-            plt.plot(np.arange(sample_size), self.predicted_data['f_roll'][0,:sample_size], label='filtered_roll', color='r', linestyle='dashed')
+            plt.scatter(np.arange(sample_size), self.predicted_data['f_roll'][0,:sample_size], label='filtered_roll', color='g', linestyle='dashed')
 
             plt.legend(loc='lower right')
             plt.ylabel('roll' + ylabel)
@@ -228,9 +239,9 @@ class KalmanFilter:
             plt.minorticks_on()
 
             plt.subplot(2, 1, 2)
-            plt.plot(np.arange(sample_size), self.predicted_data['m_pitch'][0,:sample_size], label='measured_pitch', color='g')
+            plt.scatter(np.arange(sample_size), self.predicted_data['m_pitch'][0,:sample_size], label='measured_pitch', color='g')
 
-            plt.plot(np.arange(sample_size), self.predicted_data['f_pitch'][0,:sample_size], label='filtered_pitch', color='g', linestyle='dashed')
+            plt.scatter(np.arange(sample_size), self.predicted_data['f_pitch'][0,:sample_size], label='filtered_pitch', color='b', linestyle='dashed')
 
             plt.legend(loc='lower right')
             plt.ylabel('pitch' + ylabel)

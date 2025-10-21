@@ -2,3 +2,4 @@ app/secret.txt
 venv
 latex/*
 docs/*
+data/temp.txt
