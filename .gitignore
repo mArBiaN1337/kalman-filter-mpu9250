@@ -1,0 +1,4 @@
+app/secret.txt
+venv
+latex/*
+docs/*
