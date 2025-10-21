@@ -227,9 +227,9 @@ class KalmanFilter:
             plt.subplots_adjust(hspace=0.5)
 
             plt.subplot(2, 1, 1)
-            plt.scatter(np.arange(sample_size), self.predicted_data['m_roll'][0,:sample_size], label='measured_roll', color='r')
+            plt.plot(np.arange(sample_size), self.predicted_data['m_roll'][0,:sample_size], label='measured_roll', color='r')
 
-            plt.scatter(np.arange(sample_size), self.predicted_data['f_roll'][0,:sample_size], label='filtered_roll', color='g', linestyle='dashed')
+            plt.plot(np.arange(sample_size), self.predicted_data['f_roll'][0,:sample_size], label='filtered_roll', color='r', linestyle='dashed')
 
             plt.legend(loc='lower right')
             plt.ylabel('roll' + ylabel)
@@ -239,9 +239,9 @@ class KalmanFilter:
             plt.minorticks_on()
 
             plt.subplot(2, 1, 2)
-            plt.scatter(np.arange(sample_size), self.predicted_data['m_pitch'][0,:sample_size], label='measured_pitch', color='g')
+            plt.plot(np.arange(sample_size), self.predicted_data['m_pitch'][0,:sample_size], label='measured_pitch', color='g')
 
-            plt.scatter(np.arange(sample_size), self.predicted_data['f_pitch'][0,:sample_size], label='filtered_pitch', color='b', linestyle='dashed')
+            plt.plot(np.arange(sample_size), self.predicted_data['f_pitch'][0,:sample_size], label='filtered_pitch', color='g', linestyle='dashed')
 
             plt.legend(loc='lower right')
             plt.ylabel('pitch' + ylabel)
