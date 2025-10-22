@@ -46,7 +46,7 @@ class KalmanFilter:
 
         self.initial_uncertainty = np.eye(4)
 
-        self.dt = 0.01  # 100 Hz
+        self.dt = 0.01 # 100 Hz
         
         self.read_sensor()
 
@@ -192,6 +192,11 @@ class KalmanFilter:
 
         except Exception as e:
             self.imu_data = None
+
+        self.accel_cov = np.cov([self.imu_data['ax'].flatten(), self.imu_data['ay'].flatten(), self.imu_data['az'].flatten()])
+        self.gyro_cov = np.cov([self.imu_data['gx'].flatten(), self.imu_data['gy'].flatten(), self.imu_data['gz'].flatten()])
+        print(self.accel_cov)
+        print(self.gyro_cov)
 
     def read_results(self):
         try:
