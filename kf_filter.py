@@ -36,9 +36,9 @@ class KalmanFilter:
 
         if DATA_SET_INDEX == 0:
             self.Q = 5
-            self.R = 100
+            self.R = 125
         else:
-            self.Q = 100
+            self.Q = 125
             self.R = 5
 
         self.measurement_noise_covar = np.eye(4) * self.R
@@ -84,7 +84,6 @@ class KalmanFilter:
             self.gyro = self.gyro_to_euler(*self.gyro[0], *self.euler_attitude[0][:2])
 
             gx, gy, gz = self.gyro[0]
-
             self.measured_quaternion = self.euler_to_quat(*self.euler_attitude[0])
 
             norm = np.linalg.norm(self.measured_quaternion)
@@ -96,7 +95,7 @@ class KalmanFilter:
                           [gy, -gz, 0, gx],
                           [gz, gy, -gx, 0]])
             
-            self.A = np.eye(4) + 0.5* self.dt * Un
+            self.A = np.eye(4) + (0.5 * self.dt * Un)
             
             x_pred = self.A @ x_old
             P_pred = self.A @ P_old @ self.A.T + self.process_noise_covar
