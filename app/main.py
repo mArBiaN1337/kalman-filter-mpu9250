@@ -134,18 +134,21 @@ class IMUServer:
             self.file_size = 0
 
     def create_socket(self):
-        self.s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        self.sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        self.sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        self.sock.setblocking(False)
 
-        self.s.bind((self.ip, self.port))
-        self.s.listen(1)
+        self.sock.bind((self.ip, self.port))
+        self.sock.listen(1)
         print(f"Listening on {self.ip}:{self.port}")
 
         self.onboard_led.value(0)
         
         while True:
+            conn = None
             try:
                 self.onboard_led.value(1)
-                conn, addr = self.s.accept()
+                conn, addr = self.sock.accept()
                 print(f"Connected by {addr}")                
                 http_header = (
                         "HTTP/1.1 200 OK\r\n"
@@ -157,18 +160,30 @@ class IMUServer:
                     ).encode('utf-8')
 
                 conn.sendall(http_header + self.imu_data.encode('utf-8'))
+                conn.close()
+                self.onboard_led.value(0)
+
+            except OSError as e:
+                pass 
                 
             except KeyboardInterrupt:
                 print("Shutting down connection.")
                 self.onboard_led.value(0)
-                conn.close()
-                self.s.close()
-                raise
+                if conn:
+                    conn.close()
+                
+                raise 
         
 
 if __name__ == "__main__":
     try:
         imu_server = IMUServer()
 
-    except Exception as e:
-        print("An Error occurred during IMU Server:", e)
+    except KeyboardInterrupt:
+        print("IMU Server stopped.")
+
+    finally:
+        imu_server.onboard_led.value(0)
+        if imu_server.sock:
+            imu_server.sock.close()
+        
