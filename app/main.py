@@ -1,3 +1,4 @@
+import gc
 import network
 import socket
 import os
@@ -8,7 +9,6 @@ from time import sleep
 # pyright: reportMissingImports=false
 
 FILE_NAME = "imu_data.txt"
-MAX_FILE_SIZE = 1 * 1024 * 1024  # 1 MB
 SAMPLES_PER_DATASET = 250
 SAMPLING_PERIOD = 0.01  # seconds
 
@@ -38,26 +38,6 @@ class IMUServer:
         
         self.create_socket()
 
-    def check_file_size_limit(self, file_name=FILE_NAME, max_size=MAX_FILE_SIZE):
-        try:
-            if file_name in os.listdir():
-
-                file_size = os.stat(file_name)[6]
-                if file_size >= max_size:
-
-                    print(f"File '{file_name}' exceeds {max_size} bytes. Deleting it.")
-                    os.remove(file_name)
-                    self.imu_data = ""
-                    self.file_size = 0
-                    
-                    with open(file_name, "w") as f:
-                        pass
-                else:
-                    print("File size is OK.")
-
-        except Exception as e:
-            print(f"Error checking file size: {e}")
-
     def connect_wifi(self):
         self.port = 80
         
@@ -83,11 +63,9 @@ class IMUServer:
 
         except Exception as e:
             print('Failed to connect to WiFi:', e)
-            sys.exit()
+            raise
 
     def collect_sensor_data(self, samples=SAMPLES_PER_DATASET, Ts=SAMPLING_PERIOD):
-
-        self.check_file_size_limit()
 
         print("Collecting new dataset.")
         self.led_data_being_collected.value(1)
@@ -108,30 +86,62 @@ class IMUServer:
                 self.led_data_being_collected.toggle()
                 sleep(Ts)
 
-        self.update_file_content()
-        self.onboard_led.value(1)
         self.led_data_being_collected.value(0)
         self.led_data_available.value(1)
 
-    def update_file_content(self, file_name=FILE_NAME):
-        try:
-            self.file_size = 0
-            with open(file_name, 'r') as f:
-                self.imu_data = []
+    def wait_client(self):
+        while True:
+            conn = None
+            try:
+                conn, addr = self.sock.accept()
+                print(f"Connected by {addr}")   
+
+                self.send_chunks(conn)
+                
+                conn.close()
+
+            except OSError as e:
+                pass
+
+            except KeyboardInterrupt:
+                print("Shutting down connection.")
+                gc.collect()
+
+                if conn:
+                    conn.close()
+                
+                raise
+
+    def send_chunks(self, conn, CHUNK_SIZE=1024):
+        try: 
+            with open(FILE_NAME, "r") as f:
+                self.file_size = f.seek(0, os.SEEK_END)
+                f.seek(0)
+
+                http_header = (
+                                "HTTP/1.1 200 OK\r\n"
+                                "Content-Type: text/csv\r\n"
+                                f"Content-Length: {self.file_size}\r\n"
+                                "Content-Disposition: attachment; filename=imu-data.csv\r\n"
+                                "Connection: close\r\n"
+                                "\r\n"
+                            ).encode('utf-8')
+
+                conn.sendall(http_header)
+
+                
                 while True:
-                    line = f.readline()
-                    if not line:
+                    data = f.read(CHUNK_SIZE)
+                    if not data:
                         break
-                    self.imu_data.append(line)
-                    self.file_size += len(line)
 
-                self.imu_data = ''.join(self.imu_data)
-                print(f"File '{file_name}' loaded with size {self.file_size} bytes.")
+                    conn.sendall(data.encode('utf-8'))
 
-        except Exception as e:
-            print(f"Failed to open file '{file_name}': {e}")
-            self.imu_data = "No data available"
-            self.file_size = 0
+                    gc.collect()
+
+        except OSError:
+            pass
+        
 
     def create_socket(self):
         self.sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -142,39 +152,8 @@ class IMUServer:
         self.sock.listen(1)
         print(f"Listening on {self.ip}:{self.port}")
 
-        self.onboard_led.value(0)
-        
-        while True:
-            conn = None
-            try:
-                self.onboard_led.value(1)
-                conn, addr = self.sock.accept()
-                print(f"Connected by {addr}")                
-                http_header = (
-                        "HTTP/1.1 200 OK\r\n"
-                        "Content-Type: text/csv\r\n"
-                        f"Content-Length: {self.file_size}\r\n"
-                        "Content-Disposition: attachment; filename=imu-data.csv\r\n"
-                        "Connection: close\r\n"
-                        "\r\n"
-                    ).encode('utf-8')
-
-                conn.sendall(http_header + self.imu_data.encode('utf-8'))
-                conn.close()
-                self.onboard_led.value(0)
-
-            except OSError as e:
-                pass 
-                
-            except KeyboardInterrupt:
-                print("Shutting down connection.")
-                self.onboard_led.value(0)
-                if conn:
-                    conn.close()
-                
-                raise 
-        
-
+        self.onboard_led.value(1)
+            
 if __name__ == "__main__":
     try:
         imu_server = IMUServer()
