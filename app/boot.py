@@ -18,5 +18,12 @@ class Boot:
         self.led1 = machine.Pin(13, machine.Pin.OUT)
         self.led2 = machine.Pin(18, machine.Pin.OUT)
 
+        self.turn_off_leds()
+
+    def turn_off_leds(self):
+        self.onboard_led.value(0)
+        self.led1.value(0)
+        self.led2.value(0)
+
 if __name__ == "__main__":
     pass
