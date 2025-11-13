@@ -60,6 +60,23 @@ def plot_box(ax, position, orientation):
     collection = Poly3DCollection(cube_definition, facecolors=face_colors, linewidths=1, edgecolors='k', alpha=0.5)
     ax.add_collection3d(collection)
 
+    axis_length = 0.7
+    origin = position
+    # Define the traditional axes rotated by 180 degrees around y axis
+    initial_orientation = R.from_quat([0, 0, 1, 0])
+    x_axis = initial_orientation.apply([axis_length, 0, 0]) + origin
+    y_axis = initial_orientation.apply([0, axis_length, 0]) + origin
+    z_axis = initial_orientation.apply([0, 0, axis_length]) + origin
+
+    ax.quiver(*origin, *(x_axis - origin), color='r', length=axis_length)
+    ax.quiver(*origin, *(y_axis - origin), color='g', length=axis_length)
+    ax.quiver(*origin, *(z_axis - origin), color='b', length=axis_length)
+    # indicate the axes with names drawn from the arrow
+    ax.text(*(x_axis + 0.1), 'X', color='r')
+    ax.text(*(y_axis + 0.1), 'Y', color='g')
+    ax.text(*(z_axis + 0.1), 'Z', color='b')
+
+
 def animate_box_motion(data_file):
     plt.close('all')
 
@@ -107,7 +124,7 @@ def animate_box_motion(data_file):
         orientation = R.from_euler('xyz', [roll, pitch, yaw]).as_quat()
         plot_box(ax, position, orientation)
 
-        plt.pause(1/60)  # Pause to create animation effect 60 FPS
+        plt.pause(1/60)  
 
     plt.show(block=True)
 

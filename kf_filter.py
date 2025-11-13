@@ -196,8 +196,8 @@ class KalmanFilter:
         self.accel_cov = np.cov([self.imu_data['ax'].flatten(), self.imu_data['ay'].flatten(), self.imu_data['az'].flatten()])
         self.gyro_cov = np.cov([self.imu_data['gx'].flatten(), self.imu_data['gy'].flatten(), self.imu_data['gz'].flatten()])
 
-        self.Q = (np.trace(self.gyro_cov) / 2.0 ) * (self.dt ** 2) 
-        self.R = np.trace(self.accel_cov) / 5.0
+        self.Q = (np.trace(self.gyro_cov) / 3.0 ) * (self.dt ** 2) 
+        self.R = (np.trace(self.accel_cov) / 3.0 ) * (1 / self.dt ** 2) 
 
     def read_results(self):
         try:
