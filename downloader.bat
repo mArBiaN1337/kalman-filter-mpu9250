@@ -20,7 +20,7 @@ if ([string]::IsNullOrEmpty($TargetIP)) {
 }
 
 $TargetPort = "80"
-$OutputFileName = "response.txt"
+$OutputFileName = "response.bin"
 
 $URL = "http://$($TargetIP):$($TargetPort)/"
 $OutputPath = Join-Path -Path (Get-Location) -ChildPath $OutputFileName

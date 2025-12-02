@@ -13,10 +13,10 @@ class Boot:
         gc.collect()
 
         self.btn1 = machine.Pin(25, machine.Pin.IN, machine.Pin.PULL_UP)
-
         self.onboard_led = machine.Pin(2, machine.Pin.OUT)
         self.led1 = machine.Pin(13, machine.Pin.OUT)
         self.led2 = machine.Pin(18, machine.Pin.OUT)
+        
 
         self.turn_off_leds()
 

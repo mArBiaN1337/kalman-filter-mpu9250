@@ -1,5 +1,6 @@
 import numpy as np
 import matplotlib.pyplot as plt
+from scipy.signal import butter, filtfilt
 import sys
 
 def strip_argv():
@@ -49,15 +50,8 @@ class KalmanFilter:
 
         self.initial_uncertainty = np.eye(4)
 
-        self.dt = 0.01 # 100 Hz
-        
-        self.read_sensor()
-
-        self.filter()
-
-        self.read_results()
-
-        self.plot_results()
+        self.sampling_frequency = 100.0  # Hz
+        self.dt = 1.0 / self.sampling_frequency
 
     def filter(self):
 
@@ -196,8 +190,8 @@ class KalmanFilter:
         self.accel_cov = np.cov([self.imu_data['ax'].flatten(), self.imu_data['ay'].flatten(), self.imu_data['az'].flatten()])
         self.gyro_cov = np.cov([self.imu_data['gx'].flatten(), self.imu_data['gy'].flatten(), self.imu_data['gz'].flatten()])
 
-        self.Q = (np.trace(self.gyro_cov) / 2.0 ) * (self.dt ** 2) 
-        self.R = (np.trace(self.accel_cov) / 2.0 ) * (1 / self.dt ** 2) 
+        self.Q = (np.trace(self.gyro_cov) * 1.0) * (self.dt ** 2)
+        self.R = (np.trace(self.accel_cov) * 1.0) * (1.0/(self.dt ** 2))
 
     def read_results(self):
         try:
@@ -207,6 +201,52 @@ class KalmanFilter:
 
         except Exception as e:
             self.predicted_data = None
+
+    def calibrate(self, CALIBRATION_FILE='./data/calibration/measured.txt'):
+        
+        try:
+            data = np.loadtxt(CALIBRATION_FILE, delimiter=',', skiprows=1)
+            calibration_data = {k: data[:, i] for i, k in enumerate(['ax', 'ay', 'az', 'gx', 'gy', 'gz'])}
+            calibration_data = {k: np.array([v]) for k, v in calibration_data.items()}
+
+        except:
+            pass            
+
+        params = {'bias': {}, 'scale': 0.0}
+        for axis in ['gx', 'gy', 'gz', 'ax', 'ay', 'az']:
+            if axis in ['az']:
+                params['bias'][axis] = np.abs(np.abs(np.mean(calibration_data[axis][0])) - 9.81)
+            else:
+                params['bias'][axis] = np.abs(np.mean(calibration_data[axis][0]))
+
+        for axis in ['gx', 'gy', 'gz', 'ax', 'ay']:
+            calibration_data[axis][0] = calibration_data[axis][0] - params['bias'][axis]
+            
+        params['scale'] = (np.max(calibration_data['az'][0]) - np.min(calibration_data['az'][0]))/2
+
+        for param in ['bias', 'scale']:
+            for axis in ['gx', 'gy', 'gz', 'ax', 'ay', 'az']:
+                if param == 'bias':
+                    self.imu_data[axis][0] = self.imu_data[axis][0] - params['bias'][axis]
+
+                elif param == 'scale' and axis in ['ax', 'ay', 'az']:
+                    if params['scale'] > 1:
+                        self.imu_data[axis][0] = self.imu_data[axis][0] * params['scale']
+                    elif params['scale'] < 1:
+                        self.imu_data[axis][0] = self.imu_data[axis][0] / params['scale']
+                    else: 
+                        pass
+        
+        print(params)
+
+    def DLPF(self, rel_cutoff_frequency=0.05):
+        nyquist_freq = 0.5 * self.sampling_frequency
+        cutoff_freq = rel_cutoff_frequency * self.sampling_frequency
+
+        b, a = butter(N=4, Wn=cutoff_freq / nyquist_freq, btype='low')
+
+        for axis in ['ax', 'ay', 'az', 'gx', 'gy', 'gz']:
+            self.imu_data[axis][0] = filtfilt(b, a, self.imu_data[axis][0])
 
     def plot_results(self, sample_size=None, plot_option=PLOT_OPTION):
 
@@ -267,8 +307,16 @@ class KalmanFilter:
             plt.minorticks_on()
 
             plt.show()
-
+   
+    
 if __name__ == '__main__':
     np.set_printoptions(precision=3, suppress=True)
 
     kf = KalmanFilter()
+    kf.read_sensor()
+    kf.calibrate()
+    kf.DLPF()
+
+    kf.filter()
+    kf.read_results()
+    kf.plot_results()

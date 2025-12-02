@@ -2,26 +2,33 @@ import gc
 import network
 import socket
 import os
-import machine, sys
+import machine
+import struct
 from mpu9250 import MPU9250
 from boot import Boot
 from time import sleep
 # pyright: reportMissingImports=false
 
-FILE_NAME = "imu_data.txt"
-SAMPLES_PER_DATASET = 400
-SAMPLING_PERIOD = 0.01  # seconds 100 Hz
+FILE_NAME = "imu_data.bin"
+SAMPLING_FREQUENCY = 100  # Hz
+SAMPLING_PERIOD = 1.0 / SAMPLING_FREQUENCY  # seconds
 
 class IMUServer:
     def __init__(self):
 
         boot = Boot()
+        gc.collect()
+
+        self.record_size = struct.calcsize('7f')  
+        self.samples = 500
+        self.total_bytes = self.record_size * self.samples
+        self.buffer = bytearray(self.total_bytes)
         
         self.btn_new_dataset = boot.btn1
         self.led_data_being_collected = boot.led1 
         self.led_data_available = boot.led2
         self.onboard_led = boot.onboard_led
-
+        
         self.imu_data = ""
         self.file_size = 0
 
@@ -84,29 +91,26 @@ class IMUServer:
             self.onboard_led.value(0)
             sleep(interval)
 
-    def collect_sensor_data(self, samples=SAMPLES_PER_DATASET, Ts=SAMPLING_PERIOD):
+    def collect_sensor_data(self, Ts=SAMPLING_PERIOD):
 
         gc.collect()
         print("Collecting new dataset.")
         self.led_data_being_collected.value(1)
         self.led_data_available.value(0)
 
-        with open(FILE_NAME, "w") as f:
-            f.write("ax, ay, az, gx, gy, gz, temp\n")
+        offset = 0
+        for _ in range(self.samples):
+            ax, ay, az = self.mpu.acceleration  # in m/s^2
+            gx, gy, gz = self.mpu.gyro          # in rad/s
+            temp = self.mpu.temperature         # in C
+            struct.pack_into('7f', self.buffer, offset, ax, ay, az, gx, gy, gz, temp)
+            offset += self.record_size
+            sleep(Ts)
 
-        with open(FILE_NAME, "a") as f:
-            for _ in range(samples):
-                ax, ay, az = self.mpu.acceleration  # in m/s^2
-                gx, gy, gz = self.mpu.gyro          # in rad/s
-                temp = self.mpu.temperature         # in C
+        with open(FILE_NAME, "wb") as f:
+            f.write(self.buffer)
 
-                # write data to file with commas and newline
-                f.write("{:.5f}, {:.5f}, {:.5f}, {:.5f}, {:.5f}, {:.5f}, {:.5f}\n".format(ax, ay, az, gx, gy, gz, temp))
-                self.led_data_being_collected.toggle()
-                sleep(Ts)
-
-            f.flush()
-
+        self.buffer = bytearray(self.total_bytes)
         self.led_data_being_collected.value(0)
         self.led_data_available.value(1)
 
