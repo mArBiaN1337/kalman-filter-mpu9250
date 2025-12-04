@@ -1,3 +1,4 @@
+import os
 import numpy as np
 import matplotlib.pyplot as plt
 from scipy.signal import butter, filtfilt
@@ -5,18 +6,29 @@ import sys
 
 def strip_argv():
     """Strip non-essential arguments from sys.argv for easier testing."""
-    essential_args = {'roll': 0, 'pitch': 1, 'test': 2}
-    keyword = sys.argv[1] if len(sys.argv) > 1 else 'roll'
-    return essential_args.get(keyword, 0)
+    # take the keyword of the string "python kf_filter.py <keyword>"
+    args = sys.argv
+    if len(args) > 1:
+        return args[1]
+    else:
+        return 'test'
 
-TEST = './data/test/measured.txt', './data/test/filtered.txt'
-ROLL = './data/roll_data/measured.txt', './data/roll_data/filtered.txt'
-PITCH = './data/pitch_data/measured.txt', './data/pitch_data/filtered.txt'
-DATA_SETS = [ROLL, PITCH, TEST]
-DATA_SET_INDEX = strip_argv()
-DATA_SET_INDEX = int(DATA_SET_INDEX)
-FILENAMES = DATA_SETS[DATA_SET_INDEX]  
+def dataset():
+    # generate the strings for the datasets according to the keyword
+    keyword = strip_argv()
+    
+    folder_path = f'./data/{keyword}'
+    if not os.path.exists(folder_path):
+        os.makedirs(folder_path)
+        open(f'./data/{keyword}/measured.txt', 'w').close()
+        open(f'./data/{keyword}/filtered.txt', 'w').close()
+        open(f'./data/{keyword}/quaternions.txt', 'w').close()
+    else:
+        pass   
 
+    return f'./data/{keyword}/measured.txt', f'./data/{keyword}/filtered.txt', f'./data/{keyword}/quaternions.txt'
+
+FILENAMES = dataset()  
 PLOT_OPTION = True
 
 ANGLE_UNITS = 'deg','rad'
@@ -58,11 +70,14 @@ class KalmanFilter:
         self.process_noise_covar = np.eye(4) * self.Q
         self.measurement_noise_covar = np.eye(4) * self.R
         
-        x_old = np.array([[0., 0., 1., 0.]]).T  # initial state
+        x_old = np.array([[1., 0., 0., 0.]]).T  # initial state
         P_old = self.initial_uncertainty  # initial uncertainty
 
         with open(FILENAMES[1], 'w') as f:
-            f.write("measured_roll,measured_pitch,measured_yaw,filtered_roll,filtered_pitch,filtered_yaw\n")
+            f.write("m_roll,m_pitch,m_yaw,f_roll,f_pitch,f_yaw\n")
+
+        with open(FILENAMES[2], 'w') as f:
+            f.write("m_qw,m_qx,m_qy,m_qz,f_qw,f_qx,f_qy,f_qz\n")
 
         for i in range(self.total_samples):
 
@@ -76,6 +91,8 @@ class KalmanFilter:
 
             self.accel = np.array([[ax, ay, az]])
             self.gyro = np.array([[gx, gy, gz]])
+            
+            self.fix_orientation()
 
             self.euler_attitude = self.roll_pitch(*self.accel[0])
             self.measured_quaternion = self.euler_to_quat(*self.euler_attitude[0])
@@ -83,7 +100,10 @@ class KalmanFilter:
             norm = np.linalg.norm(self.measured_quaternion)
             if norm > 1e-6:
                 self.measured_quaternion = self.measured_quaternion / norm
-
+            else:
+                pass                
+            
+            gx, gy, gz = self.gyro[0]
             Un = np.array([[0, -gx, -gy, -gz],
                           [gx, 0, gz, -gy],
                           [gy, -gz, 0, gx],
@@ -96,12 +116,17 @@ class KalmanFilter:
 
             K_gain = P_pred @ self.C.T @ np.linalg.inv(self.C @ P_pred @ self.C.T + self.measurement_noise_covar)
 
+            if np.dot(x_pred.T, self.measured_quaternion.T) < 0:
+                self.measured_quaternion = -self.measured_quaternion
+
             x_new = x_pred + K_gain @ (self.measured_quaternion.T - self.C @ x_pred)
             P_new = (np.eye(4) - K_gain @ self.C) @ P_pred
 
             norm = np.linalg.norm(x_new)
             if norm > 1e-6:
                 x_new = x_new / norm
+            else:
+                pass
 
             x_old = x_new
             P_old = P_new
@@ -109,13 +134,29 @@ class KalmanFilter:
             self.measured_attitude = self.quat_to_euler(*self.measured_quaternion[0])
             self.filtered_attitude = self.quat_to_euler(*x_new.T[0])
 
-            self.append_results(self.measured_attitude, self.filtered_attitude)
+            self.append_angles(self.measured_attitude, self.filtered_attitude)
+            self.append_quaternion(self.measured_quaternion, x_new.T)
+    
+    def fix_orientation(self):
+        rotation_matrix = np.array([[-1, 0, 0],
+                                        [0, 1, 0],
+                                        [0, 0, -1]])
+            
+        self.accel = (rotation_matrix @ self.accel.T).T
+        self.gyro = (rotation_matrix @ self.gyro.T).T
 
-
-    def append_results(self, measured, filtered):
+    def append_angles(self, measured, filtered):
         try:
             with open(FILENAMES[1], 'a') as f:
                 f.write(f"{measured[0,0]:<.3f},{measured[0,1]:<.3f},{measured[0,2]:<.3f},{filtered[0,0]:<.3f},{filtered[0,1]:<.3f},{filtered[0,2]:<.3f}\n")
+
+        except Exception as e:
+            pass
+    
+    def append_quaternion(self, measured, filtered):
+        try:
+            with open(FILENAMES[2], 'a') as f:
+                f.write(f"{measured[0,0]:<.6f},{measured[0,1]:<.6f},{measured[0,2]:<.6f},{measured[0,3]:<.6f},{filtered[0,0]:<.6f},{filtered[0,1]:<.6f},{filtered[0,2]:<.6f},{filtered[0,3]:<.6f}\n")
 
         except Exception as e:
             pass
@@ -159,21 +200,24 @@ class KalmanFilter:
     @staticmethod
     def quat_to_euler(qw, qx, qy, qz):
         # roll (x-axis rotation)
-        t0 = +2.0 * (qw * qx + qy * qz)
-        t1 = +1.0 - 2.0 * (qx * qx + qy * qy)
+        t0 = 2.0 * (qw * qx + qy * qz)
+        t1 = 1.0 - 2.0 * (qx * qx + qy * qy)
         roll = np.arctan2(t0, t1)
 
-        # pitch (y-axis rotation)
-        # Use np.clip to prevent arcsin domain errors
-        t2 = +2.0 * (qw * qy - qz * qx)
-        t2 = np.clip(t2, -1.0, 1.0)
-        pitch = np.arcsin(t2)
+        t2 = 2.0 * (qx * qz - qw * qy)
+        t3 = 1.0 - 2.0 * (qx * qx + qy * qy)
+        pitch = np.arctan2(-t2, t3)
 
         # yaw (z-axis rotation)
-        t3 = +2.0 * (qw * qz + qx * qy)
-        t4 = +1.0 - 2.0 * (qy * qy + qz * qz)
-        yaw = np.arctan2(t3, t4)
+        t4 = 2.0 * (qw * qz + qx * qy)
+        t5 = 1.0 - 2.0 * (qy * qy + qz * qz)
+        yaw = np.arctan2(t5, t4)
 
+        # make angles between 0 and 2pi
+        roll = np.mod(roll, 2 * np.pi)
+        pitch = np.mod(pitch, 2 * np.pi)
+        yaw = np.mod(yaw, 2 * np.pi)
+        
         return np.array([[roll, pitch, yaw]])
     
     def read_sensor(self):
@@ -190,8 +234,10 @@ class KalmanFilter:
         self.accel_cov = np.cov([self.imu_data['ax'].flatten(), self.imu_data['ay'].flatten(), self.imu_data['az'].flatten()])
         self.gyro_cov = np.cov([self.imu_data['gx'].flatten(), self.imu_data['gy'].flatten(), self.imu_data['gz'].flatten()])
 
-        self.Q = (np.trace(self.gyro_cov) * 1.0) * (self.dt ** 2)
-        self.R = (np.trace(self.accel_cov) * 1.0) * (1.0/(self.dt ** 2))
+        #self.Q = (np.trace(self.gyro_cov) * 1.0) * (self.dt ** 1)
+        #self.R = (np.trace(self.accel_cov) * 1.0) * (1.0/(self.dt ** 1))
+        self.Q = 0.003 ** 2
+        self.R = 0.05 ** 2
 
     def read_results(self):
         try:
@@ -236,22 +282,18 @@ class KalmanFilter:
                         self.imu_data[axis][0] = self.imu_data[axis][0] / params['scale']
                     else: 
                         pass
-        
-        print(params)
 
     def DLPF(self, rel_cutoff_frequency=0.05):
         nyquist_freq = 0.5 * self.sampling_frequency
         cutoff_freq = rel_cutoff_frequency * self.sampling_frequency
 
-        b, a = butter(N=4, Wn=cutoff_freq / nyquist_freq, btype='low')
+        b, a = butter(N=2, Wn=cutoff_freq / nyquist_freq, btype='low')
 
         for axis in ['ax', 'ay', 'az', 'gx', 'gy', 'gz']:
             self.imu_data[axis][0] = filtfilt(b, a, self.imu_data[axis][0])
 
-    def plot_results(self, sample_size=None, plot_option=PLOT_OPTION):
-
-        if sample_size is None:
-            sample_size = self.total_samples - 1
+    def plot_results(self, plot_option=PLOT_OPTION): 
+        sample_size = self.total_samples - 1
 
         if plot_option:
             sample_size = sample_size + 1
@@ -266,19 +308,20 @@ class KalmanFilter:
                 ylabel = ' (deg)'
                 m_roll_plot = m_roll_unwrapped * 180/np.pi
                 f_roll_plot = f_roll_unwrapped * 180/np.pi
-                
                 m_pitch_plot = m_pitch_unwrapped * 180/np.pi
                 f_pitch_plot = f_pitch_unwrapped * 180/np.pi
+
             elif ANGLE_CHOICE == 'rad':
                 ylabel = ' (rad)'
-
                 m_roll_plot = m_roll_unwrapped
                 f_roll_plot = f_roll_unwrapped
                 m_pitch_plot = m_pitch_unwrapped
                 f_pitch_plot = f_pitch_unwrapped
 
-            plt.figure(figsize=(10, 8))
-
+            #make it so I don't adjust it every time
+            plt.figure(figsize=(12, 8), tight_layout=True, facecolor='w', edgecolor='k', num='Kalman Filter Results')
+            manager = plt.get_current_fig_manager()
+            manager.window.geometry("+0+0")
             plt.subplots_adjust(hspace=0.5)
 
             plt.subplot(2, 1, 1)

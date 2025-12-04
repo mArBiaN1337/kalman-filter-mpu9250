@@ -19,7 +19,10 @@ if not exist "%sourceFile%" (
     echo [ERROR] "%sourceFile%" not found in the current directory.
     goto :EOF
 )
-
+:: 4. Create destination directory if it doesn't exist
+if not exist ".\data\%targetFolder%\" (
+    mkdir ".\data\%targetFolder%"
+)
 :: 5. Copy the file and rename it
 :: /Y suppresses the prompt to overwrite if the file already exists
 copy /Y "%sourceFile%" "%destPath%"
