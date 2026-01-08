@@ -1,5 +1,7 @@
 app/secret.txt
-venv
+venv/*
+data/*
 latex/*
 docs/*
-data/temp.txt
+response.bin
+sensor_data.csv
