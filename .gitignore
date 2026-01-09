@@ -1,7 +1,11 @@
 app/secret.txt
 venv/*
-data/*
 latex/*
 docs/*
+
+data/dataset1
+data/pitch
+data/roll
+data/test
 response.bin
 sensor_data.csv
